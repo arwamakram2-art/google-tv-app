@@ -1,0 +1,54 @@
+name: Build TV APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Accept Android Licenses & Install SDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Generate and Build Android TV APK
+        run: |
+          npm install -g cordova
+          cordova create tvapp com.bestream.googletv "GoogleTV_Hub"
+          
+          rm -rf tvapp/www/*
+          cp index.html tvapp/www/index.html
+          
+          cd tvapp
+          cordova platform add android@13.0.0
+          
+          # تفعيل تشغيل HTTP وتسريع الشاشة
+          sed -i 's/<application/<application android:usesCleartextTraffic="true" android:hardwareAccelerated="true"/g' platforms/android/app/src/main/AndroidManifest.xml
+          
+          # إضافة دعم التلفاز مع إبقاء زر الفتح (OPEN) شغالاً في التابلت والهاتف
+          sed -i 's/android.intent.category.LAUNCHER/android.intent.category.LAUNCHER" \/><category android:name="android.intent.category.LEANBACK_LAUNCHER/g' platforms/android/app/src/main/AndroidManifest.xml
+
+          cordova build android --debug
+
+      - name: Upload Ready APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ready-TV-APK
+          path: tvapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk
